@@ -1,7 +1,7 @@
-(defparameter *width* 15)
-(defparameter *height* 15)
+(defparameter *width* 45)
+(defparameter *height* 20)
 (defparameter *creatures* '())
-(defparameter *num-creatures* 15)
+(defparameter *num-creatures* 40)
 (defparameter *obstacles* '())
 (defparameter *player-x* (ash *width* -1))
 (defparameter *player-y* (ash *height* -1))
@@ -9,22 +9,41 @@
 
 (defun random-square ()
     (let ((pos (cons (random *width*) (random *height*))))
-        (if (or (not (empty-square pos)) (< (square-distance pos) 4))
+        (if (or (not (empty-square pos)) (<= (square-distance pos) 4))
             (random-square)
             pos)))
     
-
 
 (defun make-creatures ()
     (setf *creatures* '())
     (loop repeat *num-creatures*
         do (push (random-square) *creatures*))
-    *creatures*)
-    
+    *creatures*)    
+
 (defun make-obstacles ()
-    (loop repeat (ash (* *width* *height*) -4)
-        do (push (random-square) *obstacles*)
-    ))
+    (flet ((run-automata (born survive)
+            (let ((new-obstacles '()))
+                (loop for x below *width*
+                    do (loop for y below *height*
+                        do (let ((neighbors (loop for xn from (- x 1) below (+ x 2)
+                                    sum (loop for yn from (- y 1) below (+ y 2) when (or (not (= x 0)) (not (= y 0)))
+                                    sum (if (empty-square (cons xn yn)) 0 1)))))
+                                (if (>= (if (empty-square (cons x y)) born survive) neighbors) (push (cons x y) new-obstacles))
+                            )))
+                new-obstacles)))
+        (loop repeat (/ (* *width* *height*) 3)
+            do (push (random-square) *obstacles*))
+        (loop repeat 2 do (setf *obstacles* (run-automata 5 3)))
+        ;;(loop repeat (/ (* *width* *height*) 5)
+        ;;    do (push (random-square) *obstacles*))
+        (loop repeat 2 do (setf *obstacles* (run-automata 4 2)))
+        (loop repeat 2 do (setf *obstacles* (run-automata 5 1)))
+        ))
+        
+(defun test ()
+    (setf *obstacles* '())
+    (make-obstacles)
+    (print-field))
     
 (defun square-distance (cr)
     (+ 
@@ -32,7 +51,10 @@
         (expt (- (cdr cr) *player-y*) 2)))
         
 (defun empty-square (pt)
-    (and (not (member pt *creatures* :test #'equal)) (equal pt (cons *player-x* *player-y*)) (>= (car pt) 0) (>= (cdr pt) 0)
+    (and (not (member pt *creatures* :test #'equal))
+    (not (member pt *obstacles* :test #'equal))
+    (not (equal pt (cons *player-x* *player-y*))) 
+    (>= (car pt) 0) (>= (cdr pt) 0)
     (< (car pt) *width*) (< (cdr pt) *height*)))
     
 (defun quick-sort (list)
@@ -52,6 +74,7 @@
                 below *width*
                 do (princ (cond 
                     ((member (cons x y) *creatures* :test #'equal) "%")
+                    ((member (cons x y) *obstacles* :test #'equal) "#")
                     ((and (= *player-x* x) (= *player-y* y)) "@")
                     (t " "))))
             (princ "|")
@@ -107,7 +130,6 @@
     (mapc (lambda (cr) 
         (let ((new-pos (move-creature cr)))
             (if (empty-square new-pos)
-                '() 
                 (progn (setf (car cr) (car new-pos)) (setf (cdr cr) (cdr new-pos)))
                 ))) *creatures*))
     
