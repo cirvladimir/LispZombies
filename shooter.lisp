@@ -9,6 +9,7 @@
 (defparameter *wave-number* 0)
 (defparameter *monsters-to-spawn* 0)
 (defparameter *reacheable-edges* '())
+(defparameter *monsters-eliminated* 0)
 
 (defun random-square ()
     (let ((pos (cons (random *width*) (random *height*))))
@@ -101,6 +102,14 @@
                 (quick-sort (remove-if-not (lambda (cr) (>= (square-distance cr) dist)) (cdr list)))))))
 
 (defun print-field ()
+    (loop for x below (+ *width* 2)
+        do (princ "-"))
+    (fresh-line)
+    (format t (format '() "|~~~a:@<Wave ~~a~~;|~~;Kills: ~~a~~>|" *width*) *wave-number* *monsters-eliminated*)
+    (fresh-line)
+    (loop for x below (+ *width* 2)
+        do (princ "-"))
+    (fresh-line)
     (loop for y
         below *height*
         do (progn
@@ -113,7 +122,10 @@
                     ((and (= *player-x* x) (= *player-y* y)) "@")
                     (t " "))))
             (princ "|")
-            (fresh-line))))
+            (fresh-line)))
+    (loop for x below (+ *width* 2)
+        do (princ "-"))
+    (fresh-line))
 
 (define-condition input-error (error)
         ((message :reader message-argument :initarg :message)))
@@ -135,10 +147,11 @@
 (defun shoot (dir)
     (labels ((trace-direction (pt delt)
         (if (member pt *creatures* :test #'equal)
-            (setf *creatures* (remove-if (lambda (cr) (equal cr pt)) *creatures*))
+            (progn 
+                (setf *creatures* (remove-if (lambda (cr) (equal cr pt)) *creatures*))
+                (incf *monsters-eliminated*))
             (if (and (<= 0 (car pt)) (<= 0 (cdr pt)) (> *width* (car pt)) (> *height* (cdr pt)))
-                (trace-direction (cons (+ (car pt) (car delt)) (+ (cdr pt) (cdr delt))) delt)
-                '()))))
+                (trace-direction (cons (+ (car pt) (car delt)) (+ (cdr pt) (cdr delt))) delt)))))
         (trace-direction (cons *player-x* *player-y*)
             (cond
                 ((eq dir 'up) '(0 . -1))
@@ -191,6 +204,7 @@
     (setf *player-alive* t)
     (setf *player-x* (ash *width* -1))
     (setf *player-y* (ash *height* -1))
+    (setf *monsters-eliminated* 0)
     (setf *obstacles* '())
     (setf *creatures* '())
     (make-obstacles)
