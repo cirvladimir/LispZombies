@@ -6,6 +6,9 @@
 (defparameter *player-x* (ash *width* -1))
 (defparameter *player-y* (ash *height* -1))
 (defparameter *player-alive* t)
+(defparameter *wave-number* 0)
+(defparameter *monsters-to-spawn* 0)
+(defparameter *reacheable-edges* '())
 
 (defun random-square ()
     (let ((pos (cons (random *width*) (random *height*))))
@@ -19,6 +22,38 @@
     (loop repeat *num-creatures*
         do (push (random-square) *creatures*))
     *creatures*)    
+    
+(defun calc-reacheable-edges ()
+    (let ((front (list (cons *player-x* *player-y*)))
+        (reached '(list (cons *player-x* *player-y*))))
+        (setf *reacheable-edges* '())
+        (loop 
+            do (let ((new-front '()))
+                    (loop for fr-pt in front
+                        do (loop for x from (- (car fr-pt) 1) to (+ (car fr-pt) 1)
+                            do (loop for y from (- (cdr fr-pt) 1) to (+ (cdr fr-pt) 1)
+                                when (and (not (and (= x (car fr-pt)) (= y (cdr fr-pt)))) 
+                                        (and (>= x 0) (>= y 0) (< x *width*) (< y *height*)) 
+                                        (not (member (cons x y) reached :test #'equal)))
+                                do (progn
+                                    (push (cons x y) reached)
+                                    (push (cons x y) new-front)
+                                    (if (or (= x 0) (= y 0) (= x (- *width* 1)) (= y (- *height* 1)))
+                                        (push (cons x y) *reacheable-edges*))))))
+                    (setf front new-front))
+            while front)))
+
+(defun make-wave ()
+    (incf *wave-number*)
+    (setf *monsters-to-spawn* (+ 6 (* *wave-number* 3))))
+    
+(defun update-wave ()
+    (let ((to-spawn (max (+ *wave-number* (random 4)) *monsters-to-spawn*)))
+        (loop repeat to-spawn
+            do (let ((new-pos (nth (random (length *reacheable-edges*)) *reacheable-edges*)))
+                (if (empty-square new-pos)
+                    (progn (decf *monsters-to-spawn*)
+                        (push new-pos *creatures*)))))))
 
 (defun make-obstacles ()
     (flet ((run-automata (born survive)
@@ -26,7 +61,7 @@
                 (loop for x below *width*
                     do (loop for y below *height*
                         do (let ((neighbors (loop for xn from (- x 1) below (+ x 2)
-                                    sum (loop for yn from (- y 1) below (+ y 2) when (or (not (= x 0)) (not (= y 0)))
+                                    sum (loop for yn from (- y 1) below (+ y 2) when (not (and (= x 0) (= y 0)))
                                     sum (if (empty-square (cons xn yn)) 0 1)))))
                                 (if (>= (if (empty-square (cons x y)) born survive) neighbors) (push (cons x y) new-obstacles))
                             )))
@@ -157,8 +192,9 @@
     (setf *player-x* (ash *width* -1))
     (setf *player-y* (ash *height* -1))
     (setf *obstacles* '())
+    (setf *creatures* '())
     (make-obstacles)
-    (make-creatures)
+    (calc-reacheable-edges)
     (princ "Welcome to Shooter!")
     (fresh-line)
     (princ "Commands:")
@@ -169,14 +205,19 @@
     (fresh-line)
     (princ "    stop - exit the game")
     (fresh-line)
-    (princ "d can be up, down, left, or right")
+    (princ "direction can be up, down, left, or right")
     (fresh-line)
     (loop 
         do (progn
-            (print-field)
-            (player-move)
-            (move-creatures))
-        while (and *player-alive* *creatures*))
+            (make-wave)
+            (loop 
+                    do (progn
+                        (print-field)
+                        (player-move)
+                        (update-wave)
+                        (move-creatures))
+                    while (and *player-alive* *creatures*)))
+        while *player-alive*)
     (if *player-alive* 
         (princ "Congradulations, you win!!!")
         (princ "You loose"))
